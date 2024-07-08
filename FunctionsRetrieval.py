@@ -18,7 +18,6 @@ class block(function_block):
         return (f"FunctionBlock(name={self.name}, class_name={self.belong_class}, "
                 f"lineno={self.start_line}, end_lineno={self.end_line}, calls={self.call_func},import={self.import_repo},file_path={self.file_path})")
 
-
 def load_function_blocks(json_file):
     with open(json_file, 'r') as f:
         data = json.load(f)
@@ -53,7 +52,6 @@ def load_query(query_file):
         query = f.read()
     return query
 
-
 def get_function_text(block):
     file_path = block.file_path
     start_line = block.start_line
@@ -63,12 +61,6 @@ def get_function_text(block):
         lines = f.readlines()
     function_text = ''.join(lines[start_line-1:end_line])
     return function_text
-
-'''读取文件，获取文本'''
-
-#def cosine_similarity(vec1, vec2):
-#    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
-
 
 def compute_bm25_similarity(query, function_blocks):
     texts = [get_function_text(block) for block in function_blocks]
@@ -132,9 +124,8 @@ def lexical_ranking(
         top_n,
         doc_ids=None,#如果为 true 会淘汰非常小的检索结果
         score_threshold=None,
-):
-    '''这个函数根据不同的排序方法（如 bm25、tfidf、jaccard_sim）对文档进行排序。
-    可以选择是否使用评分阈值来过滤文档，并按评分对文档进行排序。'''
+):  
+    '''这个函数根据不同的排序方法（如 bm25、tfidf、jaccard_sim）对文档进行排序。可以选择是否使用评分阈值来过滤文档，并按评分对文档进行排序。'''
     if ranking_fn == "bm25":
         scores = compute_bm25_similarity(query, docs)
     elif ranking_fn == "tfidf":
@@ -156,7 +147,6 @@ def lexical_ranking(
         #所有值都被跳过
         if len(docs) == 0:
             return np.zeros(1,top_n)
-
     #根据之前求出来的值排序
     if doc_ids is not None:
         doc_ids = [x for _, x in sorted(zip(scores, doc_ids), reverse=True)]
@@ -168,17 +158,29 @@ def lexical_ranking(
     top_n_blocks = [docs[i] for i in top_n_indices]
     return top_n_blocks
 
-def main(json_file, query_file,rank_fn, top_n=2):
+def get_class_method(selected_blocks,need_num,class_dict):
+    #根据一个排名比较高的 block ，得到它所在的类,返回类中的method 对应的blocks.
+    #需要对 class_dict 作一些数据处理
+    pass
+
+def get_call_blocks(select_blocks,need_num):
+    #根据一个排名比较高的 block ，得到它所在的类,返回类中的method 对应的blocks.
+    pass
+
+def main(json_file, query_file,rank_fn, top_n=2,relative_methods=None,relative_calls=None):
     function_blocks,class_methods = load_function_blocks(json_file)
     query = load_query(query_file)
 
     top_n_blocks =lexical_ranking(query,function_blocks,rank_fn,top_n)
-    # 得到了最相近的 n 个函数
-    #print(top_n_blocks)
     for block in top_n_blocks:
         print(f"File: {block.file_path}, Start Line: {block.start_line}, End Line: {block.end_line}")
-        #print(get_function_text(block))
-        #print("\n")
+    relative_blocks=[]
+    relative_blocks.extend(get_class_method(top_n_blocks,relative_methods,class_methods))
+    relative_blocks.extend(get_call_blocks(top_n_blocks,relative_calls))
+
+    retrieval=top_n_blocks+relative_blocks
+
+    #最后考虑将检索信息输出到文件中
 
 root_dir=""
 top_num = 4 
