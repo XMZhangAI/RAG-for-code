@@ -183,7 +183,7 @@ def get_call_blocks(certain_block,function_blocks):
             # 如果调用是类内方法
             if "." in call:
                 class_name, method_name = call.split(".", 1)
-                if block.class_name == class_name and block.name == method_name:
+                if block.belong_class == class_name and block.name == method_name:
                     ret.append(block)
             else:
                 # 如果调用是类外函数或库函数
@@ -214,19 +214,22 @@ def main(json_file, query_file,rank_fn, top_n=2,relative_methods_num=None,relati
             print(f"The function {cnt} is in the file {block.file_path}.\nThis python file import {block.import_repo}")
         
         if block.belong_class and relative_methods_num>0:
-            print('-'*50)
-            print(f"The code below are the methods belong to the class of function {cnt}!")
+            
             relative_blocks=get_class_method(block,class_methods,function_blocks)
-            for methods in relative_blocks:
-                print(f"File: {methods.file_path}\ncontext:\n{get_function_text(methods)}")
+            if len(relative_blocks)>0:
+                print('-'*50)
+                print(f"The code below are the methods belong to the class of function {cnt}!")
+                for methods in relative_blocks:
+                    print(f"File: {methods.file_path}\ncontext:\n{get_function_text(methods)}")
         relative_methods_num-=1
 
         if block.call_func and relative_calls_num>0:
-            print('-'*50)
-            print(f"The code below are the functions the function {cnt} calls!")
             relative_blocks=get_call_blocks(block,function_blocks)
-            for func in relative_blocks:
-                print(f"File: {func.file_path}\ncontext:\n{get_function_text(func)}")
+            if len(relative_blocks)>0:
+                print('-'*50)
+                print(f"The code below are the functions the function {cnt} calls!")
+                for func in relative_blocks:
+                    print(f"File: {func.file_path}\ncontext:\n{get_function_text(func)}")
         relative_calls_num-=1
 
 
