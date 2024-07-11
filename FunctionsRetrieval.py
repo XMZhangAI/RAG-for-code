@@ -1,4 +1,3 @@
-#TODO: 同时需要注意 给出的 query 文本长度可能比较大，比如由多个函数组成，这样会大大破坏比较的准确性。bm25 考虑到了文本的长度
 import json
 import os
 from sklearn.metrics.pairwise import cosine_similarity
@@ -45,6 +44,7 @@ def load_function_blocks(json_file):
             methods = cls['methods']# methods 已经是一个 list
             class_methods[file_path][class_name] = methods
 
+    #print(class_methods)
     return function_blocks, class_methods
 
 def load_query(query_file):
@@ -56,9 +56,17 @@ def get_function_text(block):
     file_path = block.file_path
     start_line = block.start_line
     end_line = block.end_line
-    
-    with open(os.path.join(root_dir, file_path), 'r') as f:
-        lines = f.readlines()
+    full_path = os.path.join(root_dir, file_path)
+    try:
+        with open(full_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        print(f"File not found: {full_path}")
+        return ""
+    except Exception as e:
+        print(f"Error reading file: {full_path}, Error: {e}")
+        return ""
+
     function_text = ''.join(lines[start_line-1:end_line])
     return function_text
 
@@ -137,7 +145,9 @@ def lexical_ranking(
     else:
         raise NotImplementedError
 
+    #print(scores)
     if score_threshold is not None:
+        print("Use score threshold!")
         #根据阈值筛选
         skip_ids = [idx for idx, s in enumerate(scores) if s < score_threshold]
         scores = [s for idx, s in enumerate(scores) if idx not in skip_ids]
@@ -148,49 +158,90 @@ def lexical_ranking(
         if len(docs) == 0:
             return np.zeros(1,top_n)
     #根据之前求出来的值排序
-    if doc_ids is not None:
-        doc_ids = [x for _, x in sorted(zip(scores, doc_ids), reverse=True)]
-    docs_scores = [(x, s) for s, x in sorted(zip(scores, docs), reverse=True)]
-    docs = [item[0] for item in docs_scores]
-    scores = [item[1] for item in docs_scores]
-
     top_n_indices = np.argsort(scores)[-top_n:][::-1]
     top_n_blocks = [docs[i] for i in top_n_indices]
     return top_n_blocks
 
-def get_class_method(selected_blocks,need_num,class_dict):
-    #根据一个排名比较高的 block ，得到它所在的类,返回类中的method 对应的blocks.
-    #需要对 class_dict 作一些数据处理
-    pass
 
-def get_call_blocks(select_blocks,need_num):
-    #根据一个排名比较高的 block ，得到它所在的类,返回类中的method 对应的blocks.
-    pass
+def get_class_method(certain_block:block,class_dict,function_blocks):
+    ret=[]
+    class_name=certain_block.belong_class
+    if class_name:
+        methods=class_dict[certain_block.file_path][class_name]
+        for method in methods:
+            for block in function_blocks:
+                if block.name==method and block.belong_class == class_name:
+                    ret.append(block)
+    return ret
 
-def main(json_file, query_file,rank_fn, top_n=2,relative_methods=None,relative_calls=None):
+def get_call_blocks(certain_block,function_blocks):
+    ret = []
+    func_inside=certain_block.call_func
+    for block in function_blocks:
+        # 检查函数名是否在调用列表中
+        for call in func_inside:
+            # 如果调用是类内方法
+            if "." in call:
+                class_name, method_name = call.split(".", 1)
+                if block.class_name == class_name and block.name == method_name:
+                    ret.append(block)
+            else:
+                # 如果调用是类外函数或库函数
+                if block.name == call and (not block.belong_class):
+                    ret.append(block)
+                elif block.name == call.split(".")[-1] and call.split(".")[0] in block.import_repo:
+                    ret.append(block)#这里是针对其他相关文件中的 函数
+                    #这里没有包括 库函数 ，相信在提供库后LLM可以找到。
+
+    return ret
+
+def main(json_file, query_file,rank_fn, top_n=2,relative_methods_num=None,relative_calls_num=None,if_tell_import=None):
     function_blocks,class_methods = load_function_blocks(json_file)
     query = load_query(query_file)
-
     top_n_blocks =lexical_ranking(query,function_blocks,rank_fn,top_n)
+    cnt=0
+    print(f"In total there are {len(function_blocks)} functions. This time you are provided with {top_n} most similar functions and relative information about them.")
+    print("You can refer the code below, they are from the python library or the same repository of the query.\n")
     for block in top_n_blocks:
-        print(f"File: {block.file_path}, Start Line: {block.start_line}, End Line: {block.end_line}")
-    relative_blocks=[]
-    relative_blocks.extend(get_class_method(top_n_blocks,relative_methods,class_methods))
-    relative_blocks.extend(get_call_blocks(top_n_blocks,relative_calls))
+        cnt+=1
+        print('#'*70)
+        print(f"Number:{cnt} most similar function.\n{get_function_text(block)}")
+        if (not relative_calls_num) and (not relative_methods_num) and (not if_tell_import):
+            continue
+        
+        if block.import_repo:
+            print('-'*50)
+            print(f"The function {cnt} is in the file {block.file_path}.\nThis python file import {block.import_repo}")
+        
+        if block.belong_class and relative_methods_num>0:
+            print('-'*50)
+            print(f"The code below are the methods belong to the class of function {cnt}!")
+            relative_blocks=get_class_method(block,class_methods,function_blocks)
+            for methods in relative_blocks:
+                print(f"File: {methods.file_path}\ncontext:\n{get_function_text(methods)}")
+        relative_methods_num-=1
 
-    retrieval=top_n_blocks+relative_blocks
+        if block.call_func and relative_calls_num>0:
+            print('-'*50)
+            print(f"The code below are the functions the function {cnt} calls!")
+            relative_blocks=get_call_blocks(block,function_blocks)
+            for func in relative_blocks:
+                print(f"File: {func.file_path}\ncontext:\n{get_function_text(func)}")
+        relative_calls_num-=1
 
-    #最后考虑将检索信息输出到文件中
 
-root_dir=""
-top_num = 4 
+#main("F:/trydir/parsed_code_tryfilesss.json","F:/trydir/query.py","bm25",top_num,1,1,1)
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Process some files.')
-    parser.add_argument('json_file', type=str, help='The JSON file with parsed code.')
-    parser.add_argument('query_file', type=str, help='The file containing the query code.')
-    parser.add_argument('root_dir', type=str, help='The root directory for code files.')
-    parser.add_argument('rank_fn', type=str, choices=['bm25', 'tfidf', 'jaccard_sim', 'openai'], help='The ranking function to use.')
+    json_file = input("Please enter the path to the JSON file with parsed code: ")
+    query_file = input("Please enter the path to the file containing the query code: ")
+    root_dir = input("Please enter the root directory for code files: ")
+    rank_fn = input("Please enter the ranking function to use (bm25, tfidf, jaccard_sim, openai): ")
+    top_num = int(input("Please enter the number of top results to return: "))
+    relative_numbers = input("Please enter the relative_methods_num, relative_calls_num, and if_tell_import (separated by spaces): ")
+    arg1,arg2,arg3= map(int, relative_numbers.split())
 
-    args = parser.parse_args()
-    main(args.json_file, args.query_file,args.rank_fn,top_num)
+
+main(json_file, query_file,rank_fn,top_num,arg1,arg2,arg3)
+    

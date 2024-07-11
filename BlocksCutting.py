@@ -34,17 +34,16 @@ def get_python_files(directory):#TODO:这里预先假设了只有一个 director
     cnt=0
     print(directory)
     for root, dirs, files in os.walk(directory):
-        print(1)
-        print("directory = ",dirs)
-        print("files = ",files)
-        print("root = ",root)
         for file in files:
             cnt+=1
             if file.endswith(".py"):  # 确定类型
                 python_files.append(os.path.join(root, file))
     return python_files
 
+
+
 class FunctionVisitor(ast.NodeVisitor):
+    
     def __init__(self):
         self.functions = []
 
@@ -52,10 +51,22 @@ class FunctionVisitor(ast.NodeVisitor):
         calls = []
         for child in ast.walk(node):
             if isinstance(child, ast.Call):
-                if isinstance(child.func, ast.Name):
-                    calls.append(child.func.id)
-                elif isinstance(child.func, ast.Attribute):#针对method
-                    calls.append(child.func.attr)
+                func = child.func
+                if isinstance(func, ast.Name):
+                    calls.append(func.id)
+                elif isinstance(func, ast.Attribute):
+                    value = func.value
+                    if isinstance(value, ast.Name):
+                        calls.append(f"{value.id}.{func.attr}")
+                    elif isinstance(value, ast.Attribute):
+                        # For nested attributes like module.class.method
+                        attr_chain = []
+                        while isinstance(value, ast.Attribute):
+                            attr_chain.append(value.attr)
+                            value = value.value
+                        if isinstance(value, ast.Name):
+                            attr_chain.append(value.id)
+                            calls.append(".".join(reversed(attr_chain)))
         return calls
 
     def visit_FunctionDef(self, node):
@@ -63,7 +74,7 @@ class FunctionVisitor(ast.NodeVisitor):
         class_name = None
         current = node
         while current:
-            #向上回溯父节点
+            # 向上回溯父节点
             if isinstance(current, ast.ClassDef):
                 class_name = current.name
                 break
@@ -71,13 +82,14 @@ class FunctionVisitor(ast.NodeVisitor):
 
         new_func = function_block(
             node.name,
-            class_name,# 添加类名信息
+            class_name,  # 添加类名信息
             node.lineno,
             node.end_lineno,
             self.get_function_calls(node),
         )
         self.functions.append(new_func)
         self.generic_visit(node)
+
 
 def add_parent_references(node):#递归
     for child in ast.iter_child_nodes(node):
@@ -110,8 +122,6 @@ def parse_functions(file_path):
         return imports
     
     this_file_import=parse_imports()#为 block 中添加 import 信息
-    #print("import is= ",this_file_import)
-    #print("all functions= ",visitor.functions)
     for func in visitor.functions:
         func.import_repo=this_file_import
     
