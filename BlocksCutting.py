@@ -168,14 +168,11 @@ def main(input_directory, output_file):
         #Step 2
         parsed_data["Classes"]=parse_class_methods(file_path)
         all_parsed_data[file_path] = parsed_data
-    
-    #print(all_parsed_data)
     save_to_json(all_parsed_data, output_file)
 
 if __name__ == "__main__":
-    #input_directory = "D:\\Courses\\The\ second\ semester\\AI\\hello"  # 指定 Python 文件所在目录
-    input_directory="F:/2024-AI-intro-lab4-release-v1.6"
-    output_file = "parsed_code_tryfilesss.json"  # 指定输出 JSON 文件名
+    input_directory=input("Please enter the root directory for code files: ")
+    output_file = "parsed_code.json"  # 指定输出 JSON 文件名
     main(input_directory, output_file)
 
 '''Finally what will be in the json file is a big dictionary, key: file_path(only python file), value: {functions ; class}(both are lists)'''
