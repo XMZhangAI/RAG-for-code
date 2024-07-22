@@ -43,7 +43,7 @@ def find_repository_url(repository:str):
     repo_url = f"{base_url}{owner_repo1}/{owner_repo2}"
     return repo_url
 
-GITHUB_TOKEN = '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'
+
 
 def get_repo_files(repo_url, branch='master'):
     owner_repo = repo_url.replace("https://github.com/", "")
