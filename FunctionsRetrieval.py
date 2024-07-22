@@ -8,6 +8,9 @@ from rank_bm25 import BM25Okapi
 import openai
 import argparse
 
+
+file_content=""
+
 class block(function_block):
     def __init__(self, file_path_,name=None, b_class=None, s_line=None, e_line=None, calls=None, import_list=None):
         super().__init__(name, b_class, s_line, e_line, calls, import_list)
@@ -44,7 +47,6 @@ def load_function_blocks(json_file):
             methods = cls['methods']# methods 已经是一个 list
             class_methods[file_path][class_name] = methods
 
-    #print(class_methods)
     return function_blocks, class_methods
 
 def load_query(query_file):
@@ -53,23 +55,18 @@ def load_query(query_file):
     return query
 
 def get_function_text(block):
-    file_path = block.file_path
+    global file_content
     start_line = block.start_line
     end_line = block.end_line
-    full_path = os.path.join(root_dir, file_path)
+    this_content=file_content[block.file_path]
     try:
-        with open(full_path, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-    except FileNotFoundError:
-        print(f"File not found: {full_path}")
-        return ""
+        lines = this_content.split('\n')
     except Exception as e:
-        print(f"Error reading file: {full_path}, Error: {e}")
+        print(f"Error processing file content. Error: {e}")
         return ""
 
-    function_text = ''.join(lines[start_line-1:end_line])
+    function_text = '\n'.join(lines[start_line-1:end_line])
     return function_text
-
 def compute_bm25_similarity(query, function_blocks):
     texts = [get_function_text(block) for block in function_blocks]
     tokenized_texts = [text.split() for text in texts]
@@ -145,7 +142,6 @@ def lexical_ranking(
     else:
         raise NotImplementedError
 
-    #print(scores)
     if score_threshold is not None:
         print("Use score threshold!")
         #根据阈值筛选
@@ -195,56 +191,40 @@ def get_call_blocks(certain_block,function_blocks):
 
     return ret
 
-def main(json_file, query_file,rank_fn, top_n=2,relative_methods_num=None,relative_calls_num=None,if_tell_import=None):
+def run_FR(json_file, query,files_content_arg,rank_fn="bm25", top_n=1,relative_methods_num=0,relative_calls_num=0,if_tell_import=0):
+    global  file_content
+    file_content=files_content_arg
     function_blocks,class_methods = load_function_blocks(json_file)
-    query = load_query(query_file)
     top_n_blocks =lexical_ranking(query,function_blocks,rank_fn,top_n)
     cnt=0
-    print(f"In total there are {len(function_blocks)} functions. This time you are provided with {top_n} most similar functions and relative information about them.")
-    print("You can refer the code below, they are from the python library or the same repository of the query.\n")
+    line1=f"In total there are {len(function_blocks)} functions. This time you are provided with {top_n} most similar functions and relative information about them.You can refer the code below, they are from the python library or the same repository of the query.\n"
+    similar_func_line=""
     for block in top_n_blocks:
         cnt+=1
-        print('#'*70)
-        print(f"Number:{cnt} most similar function.\n{get_function_text(block)}")
+        similar_func_line+=f"Number:{cnt} most similar function.\n{get_function_text(block)}\n"
         if (not relative_calls_num) and (not relative_methods_num) and (not if_tell_import):
             continue
-        
-        if block.import_repo:
-            print('-'*50)
-            print(f"The function {cnt} is in the file {block.file_path}.\nThis python file import {block.import_repo}")
+        #if block.import_repo:
+            #print('-'*50)
+            #print(f"The function {cnt} is in the file {block.file_path}.\nThis python file import {block.import_repo}")
         
         if block.belong_class and relative_methods_num>0:
-            
             relative_blocks=get_class_method(block,class_methods,function_blocks)
-            if len(relative_blocks)>0:
-                print('-'*50)
-                print(f"The code below are the methods belong to the class of function {cnt}!")
-                for methods in relative_blocks:
-                    print(f"File: {methods.file_path}\ncontext:\n{get_function_text(methods)}")
+            #if len(relative_blocks)>0:
+                #print('-'*50)
+                #print(f"The code below are the methods belong to the class of function {cnt}!")
+                #for methods in relative_blocks:
+                    #print(f"File: {methods.file_path}\ncontext:\n{get_function_text(methods)}")
         relative_methods_num-=1
 
         if block.call_func and relative_calls_num>0:
             relative_blocks=get_call_blocks(block,function_blocks)
-            if len(relative_blocks)>0:
-                print('-'*50)
-                print(f"The code below are the functions the function {cnt} calls!")
-                for func in relative_blocks:
-                    print(f"File: {func.file_path}\ncontext:\n{get_function_text(func)}")
+            #if len(relative_blocks)>0:
+                #print('-'*50)
+                #print(f"The code below are the functions the function {cnt} calls!")
+                #for func in relative_blocks:
+                    #print(f"File: {func.file_path}\ncontext:\n{get_function_text(func)}")
         relative_calls_num-=1
-
-
-#main("F:/trydir/parsed_code_tryfilesss.json","F:/trydir/query.py","bm25",top_num,1,1,1)
-
-
-if __name__ == "__main__":
-    json_file = input("Please enter the path to the JSON file with parsed code: ")
-    query_file = input("Please enter the path to the file containing the query code: ")
-    root_dir = input("Please enter the root directory for code files: ")
-    rank_fn = input("Please enter the ranking function to use (bm25, tfidf, jaccard_sim, openai): ")
-    top_num = int(input("Please enter the number of top results to return: "))
-    relative_numbers = input("Please enter the relative_methods_num, relative_calls_num, and if_tell_import (separated by spaces): ")
-    arg1,arg2,arg3= map(int, relative_numbers.split())
-
-
-main(json_file, query_file,rank_fn,top_num,arg1,arg2,arg3)
+    information=line1+similar_func_line
+    return information
     
