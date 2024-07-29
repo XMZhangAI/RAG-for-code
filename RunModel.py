@@ -2,12 +2,12 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import BlocksCutting,FunctionsRetrieval
 import json
-import re
 import base64
 import requests
 import argparse
 import torch
-from EvaluatePred import get_score
+from get_model_output import Run
+from GetInput import get_input
 
 def load_test_data(jsonl_file):
     '''line_completion.jsonl 将其中的 从begin到end 的数据转化为 python 数据。'''
@@ -44,6 +44,7 @@ def find_repository_url(repository:str):
     return repo_url
 
 
+GITHUB_TOKEN = 'Your API'
 
 def get_repo_files(repo_url, branch='master'):
     owner_repo = repo_url.replace("https://github.com/", "")
@@ -66,6 +67,7 @@ def get_file_content(repo_url, file_path):
     file_content = response.json()
     return base64.b64decode(file_content['content']).decode('utf-8')
 
+
 def Cut_and_Retrieve(query,metadata):
     repo_url=find_repository_url(metadata["repository"])
     print(repo_url)
@@ -77,7 +79,7 @@ def Cut_and_Retrieve(query,metadata):
         file_contents[python_file]=content
     # 调用 BlocksCutting 和 FunctionsRetrieval
     BlocksCutting.BC_main(file_contents)
-    information = FunctionsRetrieval.run_FR("json_temp.json",query,file_contents)
+    information = FunctionsRetrieval.run_FR("json_temp.json",query,file_contents,"bm25",3)
 
     def get_groundtruth_rightcontext(line1,line2):
             this_content=file_contents[metadata["file"]]
@@ -91,62 +93,35 @@ def Cut_and_Retrieve(query,metadata):
     ground_truth,right_context=get_groundtruth_rightcontext(metadata['groundtruth_start_lineno'],metadata['right_context_start_lineno'])
     return information,ground_truth,right_context
 
-
-
-
-def join_groundtruth_and_context(groundtruth, right_context):
-    """确保groundtruth和right context被正确连接为字符串。"""
-    # 如果groundtruth或right context不是字符串，则尝试将其内容转换为字符串
-    if not isinstance(groundtruth, str):
-        groundtruth = ' '.join(groundtruth) if isinstance(groundtruth, list) else str(groundtruth)
-    if not isinstance(right_context, str):
-        right_context = ' '.join(right_context) if isinstance(right_context, list) else str(right_context)
-    return groundtruth + right_context
-
-
-def run_model(data,tokenizer,model):
-    experiment_result = []
+def get_Model_input(data):
     test_id=1
+    all_input=[]
     for item in data:
         query=process_prompt_to_query(item["prompt"])
         related_information,groundtruth,right_context=Cut_and_Retrieve(query,item["metadata"])
-
-        def format_completion_task(left_context, query,related_code):
-            """格式化代码补全任务的输入"""
-            formatted_input = (
-                f"请根据\n{related_code}\n\n 补全这个函数\n{query}\n\n 要求: 打印输出残缺的那一行的代码和代码的下文.\n"
-            )
-            return formatted_input
-
         '''调用大模型'''
-        #print(item["metadata"])
-        print("ground_truth=",groundtruth)
+        input_text = get_input(related_information,item["prompt"])
+        one_line={
+            'input':input_text,
+            'groundtruth':groundtruth,
+            'right_context':right_context
+        }
+        all_input.append(one_line)
+        if related_information:
+            print("test",test_id)
+            test_id+=1
+        if test_id>2:
+            break
+        continue
         
-        input_text = format_completion_task(item["prompt"], query, related_information)
-        #print("input_text",input_text)
-        #input_text=query
-        inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
-        outputs = model.generate(**inputs, max_new_tokens=140)
-        pred = tokenizer.decode(outputs[0],skip_special_tokens=True)
-        #print("query=",query)
-        # 移除输入文本部分，保留补全内容
-        if pred.startswith(input_text):
-            pred = pred[len(input_text):]
-        print("output begin","#"*80)
-        #print("output = ",pred)
-        print("output end","#"*80)
-        full_groundtruth = join_groundtruth_and_context(groundtruth, right_context)
-        scores=get_score(pred,groundtruth,full_groundtruth)
-        experiment_result.append(scores)
-        print("test",test_id,"scores:",scores)
-        test_id+=1
-        break
-    return experiment_result
+        
+    with open('output.jsonl', 'w', encoding='utf-8') as f:
+        for item in all_input:
+            json_string = json.dumps(item, ensure_ascii=False)  # 将字典转换为 JSON 字符串
+            f.write(json_string + '\n')
+    return 'output.jsonl'
 
-def save_to_json(data, output_file):
-    """将数据保存为 JSON 文件"""
-    with open(output_file, "w", encoding="utf-8") as file:
-        json.dump(data, file, indent=4)
+
 
 def main():
     
@@ -156,14 +131,11 @@ def main():
         '--data_path', type=str, default="F:/line_completion.jsonl",
         help='path to directory where data is organized in lang/task.jsonl format'
     )
-    parser.add_argument('--temperature', type=float, default=0.2)
+    parser.add_argument('--temperature', type=float, default=0.6)
 
     parser.add_argument('--top_p', type=float, default=0.95)
-    '''
-    parser.add_argument(
-        '--task', type=str, required=True,
-    )
-    '''
+    parser.add_argument('--top_k', type=float, default=50)
+    parser.add_argument('--do_sample', type=bool, default=True)
     parser.add_argument(
         '--output_file', type=str, default="json_scores.json",
         help='path to directory where to store outputs'
@@ -185,17 +157,17 @@ def main():
         help='maximum number of tokens for cross file context'
     )
     parser.add_argument(
-        '--generation_max_tokens', type=int, default=50,
+        '--generation_max_tokens', type=int, default=5000,
         help='maximum number of tokens to generate'
     )
     
     args = parser.parse_args()
-    print(json.dumps(vars(args), indent=4))
+    #print(json.dumps(vars(args), indent=4))
 
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(args.model, trust_remote_code=True, torch_dtype=torch.bfloat16).cuda()
     data=load_test_data(args.data_path)
-    experiment_result=run_model(data,tokenizer,model)
-    save_to_json(experiment_result,args.output_file)
+    jsonl_file=get_Model_input(data)
+    score_file=Run(tokenizer,model,args,jsonl_file)
 
 main()

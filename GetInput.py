@@ -30,7 +30,10 @@ def get_input(retrieved_code,prompt):
     cnt=0
     for block in retrieved_code:
         cnt+=1
-        identifiers.extend(list(get_identifiers_from_code(block)))
+        try:
+            identifiers.extend(list(get_identifiers_from_code(block)))
+        except:
+            continue
     #print("identifiers",identifiers,"\n\n")
     #print("cnt=",cnt)
     text=\

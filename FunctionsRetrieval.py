@@ -187,8 +187,6 @@ def get_call_blocks(certain_block,function_blocks):
                     ret.append(block)
                 elif block.name == call.split(".")[-1] and call.split(".")[0] in block.import_repo:
                     ret.append(block)#这里是针对其他相关文件中的 函数
-                    #这里没有包括 库函数 ，相信在提供库后LLM可以找到。
-
     return ret
 
 def run_FR(json_file, query,files_content_arg,rank_fn="bm25", top_n=1,relative_methods_num=0,relative_calls_num=0,if_tell_import=0):
@@ -197,34 +195,18 @@ def run_FR(json_file, query,files_content_arg,rank_fn="bm25", top_n=1,relative_m
     function_blocks,class_methods = load_function_blocks(json_file)
     top_n_blocks =lexical_ranking(query,function_blocks,rank_fn,top_n)
     cnt=0
-    line1=f"In total there are {len(function_blocks)} functions. This time you are provided with {top_n} most similar functions and relative information about them.You can refer the code below, they are from the python library or the same repository of the query.\n"
-    similar_func_line=""
+    ret=[]
     for block in top_n_blocks:
         cnt+=1
-        similar_func_line+=f"Number:{cnt} most similar function.\n{get_function_text(block)}\n"
+        ret.append(get_function_text(block))
         if (not relative_calls_num) and (not relative_methods_num) and (not if_tell_import):
             continue
-        #if block.import_repo:
-            #print('-'*50)
-            #print(f"The function {cnt} is in the file {block.file_path}.\nThis python file import {block.import_repo}")
-        
         if block.belong_class and relative_methods_num>0:
-            relative_blocks=get_class_method(block,class_methods,function_blocks)
-            #if len(relative_blocks)>0:
-                #print('-'*50)
-                #print(f"The code below are the methods belong to the class of function {cnt}!")
-                #for methods in relative_blocks:
-                    #print(f"File: {methods.file_path}\ncontext:\n{get_function_text(methods)}")
+            ret.append(get_class_method(block,class_methods,function_blocks))
         relative_methods_num-=1
 
         if block.call_func and relative_calls_num>0:
-            relative_blocks=get_call_blocks(block,function_blocks)
-            #if len(relative_blocks)>0:
-                #print('-'*50)
-                #print(f"The code below are the functions the function {cnt} calls!")
-                #for func in relative_blocks:
-                    #print(f"File: {func.file_path}\ncontext:\n{get_function_text(func)}")
+            ret.append(get_call_blocks(block,function_blocks))
         relative_calls_num-=1
-    information=line1+similar_func_line
-    return information
+    return ret
     
