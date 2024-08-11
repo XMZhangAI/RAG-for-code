@@ -1,6 +1,6 @@
 from difflib import SequenceMatcher
 import re
-
+import json
 
 def calculate_exact_match(pred, groundtruth):
     """计算精确匹配得分。"""
@@ -34,9 +34,17 @@ def calculate_identifier_match(pred, groundtruth):
     common_identifiers = pred_identifiers.intersection(groundtruth_identifiers)
     return len(common_identifiers) / len(groundtruth_identifiers)
 
+def join_groundtruth_and_context(groundtruth, right_context):
+    """确保groundtruth和right context被正确连接为字符串。"""
+    # 如果groundtruth或right context不是字符串，则尝试将其内容转换为字符串
+    if not isinstance(groundtruth, str):
+        groundtruth = ' '.join(groundtruth) if isinstance(groundtruth, list) else str(groundtruth)
+    if not isinstance(right_context, str):
+        right_context = ' '.join(right_context) if isinstance(right_context, list) else str(right_context)
+    return groundtruth + right_context
 
 def eval_pred(pred,groundT,full_groundtruth):
-
+    #print(groundT)
     exact_match=calculate_exact_match(pred,groundT)
     edit_similarity=calculate_edit_similarity(pred,full_groundtruth)
     identifier_similarity=calculate_identifier_match(pred,full_groundtruth)
@@ -54,3 +62,28 @@ def get_score(pred,groundtruth,full_groundtruth):
         'groundtruth_valid': extract_first_two_code_lines(full_groundtruth)
     }
     return scores
+
+
+def load_score(json_file,scores_result):
+    data=[]
+    results=[]
+    
+    with open(json_file, 'r') as f1:
+        for line in f1:
+            data.append(json.loads(line.strip()))
+    
+    for d in data:
+        #print(d['task_id'][0])
+        ground_truth=d['groundtruth'][0]
+        full_groundtruth=join_groundtruth_and_context(ground_truth,d['right_context'])
+        score=get_score(d['pred'],ground_truth,full_groundtruth)
+        result={
+            'score':score,
+            'idx':d['task_id'][0]
+        }
+        results.append(result)
+
+    with open(scores_result, 'w') as f2:
+        for ret in results:
+            json_string = json.dumps(ret, ensure_ascii=False)  # 将字典转换为 JSON 字符串
+            f2.write(json_string + '\n')
