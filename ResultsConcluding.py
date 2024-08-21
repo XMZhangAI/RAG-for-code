@@ -11,9 +11,10 @@ def process_data(file_path):
         for line in file:
             data = json.loads(line)
             # Check the context_type and update the corresponding scores and counts
+            #print(data)
             scores['exact_match']+=data['score']['exact_match']
-            scores['edit_similarity'] += data['scores']['edit_similarity']
-            scores['chunk']['identifier_match'] += data['scores']['identifier_match']
+            scores['edit_similarity'] += data['score']['edit_similarity']
+            scores['identifier_match'] += data['score']['identifier_match']
             scores['count'] += 1
 
 
@@ -31,9 +32,7 @@ def process_data(file_path):
     return averages
 
 # Specify the path to your JSONL file
-file_path = ''
 
 # Process the file and get the averages
-averages = process_data(file_path)
-print(averages)
+
 

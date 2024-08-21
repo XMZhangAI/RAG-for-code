@@ -2,6 +2,15 @@ from difflib import SequenceMatcher
 import re
 import json
 
+def process_groundtruth(base_prompt,groundtruth: str) -> str:
+    # 将字符串按行拆分
+    lines = base_prompt.split('\n')
+    half_line=lines[-1] 
+    if groundtruth.startswith(half_line):
+        groundtruth = groundtruth[len(half_line):]
+
+    return groundtruth
+
 def calculate_exact_match(pred, groundtruth):
     """计算精确匹配得分。"""
     return 1 if pred.startswith(groundtruth) else 0
@@ -74,7 +83,9 @@ def load_score(json_file,scores_result):
     
     for d in data:
         #print(d['task_id'][0])
-        ground_truth=d['groundtruth'][0]
+        ground_truth=process_groundtruth(d['base_prompt'],d['groundtruth'][0])
+        if d is data[0]:
+            print(ground_truth)
         full_groundtruth=join_groundtruth_and_context(ground_truth,d['right_context'])
         score=get_score(d['pred'],ground_truth,full_groundtruth)
         result={
@@ -87,3 +98,7 @@ def load_score(json_file,scores_result):
         for ret in results:
             json_string = json.dumps(ret, ensure_ascii=False)  # 将字典转换为 JSON 字符串
             f2.write(json_string + '\n')
+
+
+
+'''这里需要注意把多余的换行符去除，再进行比较。'''

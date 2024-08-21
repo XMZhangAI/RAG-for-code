@@ -1,5 +1,4 @@
 """
-Script to run vllm-based inference. See README for an example.
 这里并不套用模版！！！
 """
 import os
@@ -66,7 +65,6 @@ def prepare_prompt(
 
     return additional_context + '\n' + prompt
 
-
 def cceval_generate(
         args,
         data,
@@ -77,6 +75,7 @@ def cceval_generate(
 ) -> List[str]:
     all_prompts = []
     for d in data:
+        
         base_prompt = d['base_prompt']
         contexts = d['similar_function']
         retrieve_functions=""
@@ -110,12 +109,12 @@ def cceval_generate(
 
 def vllm_infer_run(model_path, args,input_jsonl_file):
     # 确保模型和分词器从本地加载
-    llm = LLM(model=model_path, tensor_parallel_size=args.tp_size, max_model_len=args.model_max_tokens)
-    tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
+    llm = LLM(model=model_path, tensor_parallel_size=args.tp_size,trust_remote_code=True, max_model_len=args.model_max_tokens)
+    tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True,trust_remote_code=True)
     sampling_params = SamplingParams(temperature=args.temperature, top_p=args.top_p, max_tokens=args.generation_max_tokens)
 
     # setup path
-    out_path = 'reply_prediction.jsonl'
+    out_path = 'reply_prediction(try).jsonl'
     data = []
     with open(input_jsonl_file, 'r') as f:
         for line in f:
@@ -125,3 +124,4 @@ def vllm_infer_run(model_path, args,input_jsonl_file):
     return out_path
 
 
+'''处理输入的时候需要注意：模型的输出结果应该是包括 groundtruth 的完整的一行。'''
