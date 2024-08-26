@@ -1,5 +1,4 @@
 # Retrieved Augement Code Generation: Repo-Domin Tuning
-### 本科生的第一个项目
 始于 2024.6.10
 ## 两个 python 文件的介绍
 ### BlocksCutting.py 使用说明
