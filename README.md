@@ -65,3 +65,8 @@ FunctionsRetrieval.py 是一个用于在代码库中根据查询代码片段检�
 通过GPT的reflection，没有得到一个非常有建设性的解释。  
 在自己的观察之后，发现similar function在一些情况下包含“正确答案本身”，这无疑提高了模型预测的准确性。（这一点后续也需要注意）  
 之后尝试更换测试数据，并更换模型，解决 mask 的问题。？？？
+
+### zip 文件包含预实验的数据
+all.json 指向大模型的输入。
+reply_predict是模型对应的输出。
+final_score是每条数据的评估指标。
