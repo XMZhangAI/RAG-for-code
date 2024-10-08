@@ -38,7 +38,8 @@ import_repo：包含该函数的文件中导入的模块列表。
 
 >函数：main(input_directory, output_file)
 主函数，负责解析指定目录中的Python文件并将结果保存到JSON文件中。
----
+
+
 ### FunctionsRetrieval.py 文件介绍  
 FunctionsRetrieval.py 是一个用于在代码库中根据查询代码片段检索最相关的函数块的 Python 脚本。这个脚本结合了不同的文本相似度计算方法（如 BM25、TF-IDF、Jaccard 相似度和 OpenAI 的嵌入）来对函数块进行排名，并返回最相关的函数块以及它们的相关信息。  
 ***主要功能***  
@@ -52,3 +53,22 @@ FunctionsRetrieval.py 是一个用于在代码库中根据查询代码片段检�
 获取类方法：获取与给定函数块相关的类方法。  
 获取调用的函数：获取给定函数块中调用的其他函数，并返回这些函数块。  
 交互式输入：支持用户通过交互式输入指定 JSON 文件、查询文件、根目录、排序方法、返回结果数量以及相关参数。  
+
+## 后续工作
+后续完成了模型调用和评估的相关工作，截止2024.8.30，实现了一个基础的基于函数检索的pipeline。  
+主要分为以下这些细节：  
+1.利用URL和github令牌在github对应的仓库中获取所有python文件的文本，基于函数切割成块。  
+2.处理prompt，得到最后的 def 与之后的字符串，与之前的函数块进行相似度比较，得到最相近的n（3）个函数。（这里遇到了一个问题：如果截断点不在函数里面，将大大降低检索的准确性）  
+3.将prompt与similar function进行合并，一起作为输入给大模型，得到大模型的输出（prediction）。（我这里存在一个疑惑……）  
+4.处理 groundtruth 和 right context 组成的 valid context （一行半），与模型的预测进行相关性计（exact match, edit similarity, identifier similarity）。
+
+## 反思与下一个阶段的规划  
+我们得到的基于函数的RAG相比于 base RAG 在效果指标上有显著提升。  
+通过GPT的reflection，没有得到一个非常有建设性的解释。  
+在自己的观察之后，发现similar function在一些情况下包含“正确答案本身”，这无疑提高了模型预测的准确性。（这一点后续也需要注意）  
+之后尝试更换测试数据，并更换模型，解决 mask 的问题。？？？
+
+### zip 文件包含预实验的数据
+all.json 指向大模型的输入。
+reply_predict是模型对应的输出。
+final_score是每条数据的评估指标。
